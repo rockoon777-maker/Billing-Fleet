@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billing Cheat Sheet</title>
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; margin: 0; padding: 15px; color: #333; }
+        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h2, h3 { text-align: center; color: #2c3e50; margin-bottom: 10px; margin-top: 20px; }
+        label { font-weight: bold; display: block; margin-top: 10px; font-size: 14px; }
+        input[type="number"], input[type="text"], select { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 16px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        details { background: #e8f6f3; border: 1px solid #1abc9c; border-radius: 5px; padding: 15px; margin-top: 15px; margin-bottom: 20px;}
+        summary { font-weight: bold; color: #16a085; cursor: pointer; padding: 5px 0; outline: none; font-size: 16px;}
+        .checkbox-group { margin-top: 15px; }
+        .checkbox-group label { display: inline-block; margin-top: 0; margin-right: 15px; font-size: 15px; }
+        input[type="checkbox"] { transform: scale(1.3); margin-right: 5px; }
+        .btn-main { width: 100%; padding: 15px; background-color: #27ae60; color: white; border: none; border-radius: 5px; font-size: 18px; font-weight: bold; margin-top: 20px; cursor: pointer; }
+        .btn-main:active { background-color: #2ecc71; }
+        .btn-clear { width: 100%; padding: 15px; background-color: #e74c3c; color: white; border: none; border-radius: 5px; font-size: 18px; font-weight: bold; margin-top: 10px; cursor: pointer; }
+        .btn-clear:active { background-color: #c0392b; }
+        .btn-scan { background-color: #3498db; color: white; border: none; border-radius: 5px; padding: 10px; margin-top: 5px; margin-left: 5px; font-weight: bold; cursor: pointer; width: 110px; font-size: 12px; }
+        .btn-scan:active { background-color: #2980b9; }
+        .input-group { display: flex; align-items: center; }
+        .output-card { background-color: #e8f6f3; border-left: 5px solid #1abc9c; padding: 15px; margin-top: 15px; border-radius: 5px; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 4px; }
+        .row:last-child { border-bottom: none; }
+        .highlight-row { color: #2980b9; font-weight: bold; }
+        .total-row { font-weight: bold; font-size: 18px; color: #c0392b; border-top: 2px solid #333; padding-top: 8px; margin-top: 8px; }
+        .charge-row { color: #16a085; font-weight: bold; font-size: 15px; border-top: 1px solid #1abc9c; padding-top: 4px; margin-top: 4px; }
+        .accent-box { background: #d1f2eb; padding: 10px; border-radius: 5px; margin-top: 10px; border: 1px dashed #16a085; }
+        .mode-box { background: #2c3e50; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .mode-box label { color: #ecf0f1; margin-top: 0; font-size: 16px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Billing Calculator</h2>
+    
+    <div class="mode-box">
+        <label>⚙️ Select Billing Mode:</label>
+        <select id="billingMode" onchange="toggleMode()">
+            <option value="standard">Standard Machine (M1 / M2 / M3)</option>
+            <option value="fleet">Multi-Machine Fleet (Black Only)</option>
+        </select>
+    </div>
+    
+    <details open>
+        <summary>📝 Contract Rates & Settings</summary>
+        <div class="grid-2">
+            <div><label>A4 Color Rate (₱)</label><input type="number" id="a4Rate" step="0.01"></div>
+            <div><label>A3 Color Rate (₱)</label><input type="number" id="a3Rate" step="0.01"></div>
+        </div>
+        
+        <div class="accent-box">
+            <label style="color:#16a085; font-size:16px;"><strong>Black Pricing Model</strong></label>
+            <div class="grid-2">
+                <div style="grid-column: span 2;"><label>Volume Threshold (Free limit OR Min Copies)</label><input type="number" id="m2Threshold"></div>
+                <div><label>Excess Rate (₱)</label><input type="number" id="blackExcessRate" step="0.01"></div>
+                <div><label>Base / Flat Rate (₱)</label><input type="number" id="blackBaseRate" step="0.01"></div>
+            </div>
+            <label style="font-weight:normal; margin-top:15px; display:block;">
+                <input type="checkbox" id="isFreeMode" checked> <strong>Apply as FREE Copies</strong><br>
+                <small style="color:#555; margin-left:25px;">Uncheck this for Tiered "Min Copies" billing. (Ignored in Fleet Mode)</small>
+            </label>
+        </div>
+
+        <div><label>Monthly Rental (₱)</label><input type="number" id="rentalFee" step="0.01"></div>
+
+        <div class="checkbox-group">
+            <label><input type="checkbox" id="isVatable"> 12% VAT Applicable</label><br><br>
+            <label><input type="checkbox" id="hasWht"> 2% Withholding Tax</label>
+        </div>
+    </details>
+
+    <h3>Meter Input</h3>
+    <input type="file" id="cameraInput" accept="image/*" style="display: none;" onchange="processImage(event)">
+
+    <div id="standardMeters">
+        <div class="grid-2">
+            <div style="grid-column: span 2;">
+                <label>M1 Present (Color)</label>
+                <div class="input-group">
+                    <input type="text" id="m1Pres" placeholder="Type or upload image">
+                    <button class="btn-scan" onclick="document.getElementById('cameraInput').click()">📷 Scan</button>
+                </div>
+            </div>
+            <div><label>M1 Previous</label><input type="number" id="m1Prev"></div>
+            <div><label>M2 Present (Black)</label><input type="number" id="m2Pres"></div>
+            <div><label>M2 Previous</label><input type="number" id="m2Prev"></div>
+            <div><label>M3 Present (A3 Color)</label><input type="number" id="m3Pres"></div>
+            <div><label>M3 Previous</label><input type="number" id="m3Prev"></div>
+        </div>
+    </div>
+
+    <div id="fleetMeters" style="display: none;">
+        <div class="grid-2">
+            <div><label>Machine 1 Present</label><input type="number" id="f1Pres"></div>
+            <div><label>Machine 1 Previous</label><input type="number" id="f1Prev"></div>
+            <div><label>Machine 2 Present</label><input type="number" id="f2Pres"></div>
+            <div><label>Machine 2 Previous</label><input type="number" id="f2Prev"></div>
+            <div><label>Machine 3 Present</label><input type="number" id="f3Pres"></div>
+            <div><label>Machine 3 Previous</label><input type="number" id="f3Prev"></div>
+            <div><label>Machine 4 Present</label><input type="number" id="f4Pres"></div>
+            <div><label>Machine 4 Previous</label><input type="number" id="f4Prev"></div>
+        </div>
+    </div>
+
+    <button class="btn-main" onclick="calculateBilling()">Generate Cheat Sheet</button>
+    <button class="btn-clear" onclick="clearForm()">Clear Meters</button>
+
+    <div id="results" style="display: none;">
+        <h3>Monthly Copy/Print Form</h3>
+        
+        <div id="standardOutput" class="output-card">
+            <div class="row"><span>M1 Gross (Color):</span> <span id="outM1Gross">0</span></div>
+            <div class="row"><span>Less M3:</span> <span id="outM3Sub">0</span></div>
+            <div class="row"><span>M1 Adjusted:</span> <span id="outM1Adj">0</span></div>
+            <div class="row"><span>M1 Spoilage (2%):</span> <span id="outM1Spoil">0</span></div>
+            <div class="row"><span>M1 NET BILLABLE:</span> <span id="outM1Net">0</span></div>
+            <div class="row charge-row"><span>M1 Charge:</span> <span id="outM1Charge">₱0.00</span></div>
+            <br>
+            <div class="row"><span>M2 Gross (Black):</span> <span id="outM2Gross">0</span></div>
+            <div class="row"><span>M2 Spoilage (2%):</span> <span id="outM2Spoil">0</span></div>
+            <div class="row" style="font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 5px;"><span>M2 NET COPIES:</span> <span id="outM2Net">0</span></div>
+            <div class="row highlight-row" style="margin-top: 8px;"><span id="lblM2Base">Less Free Copies:</span> <span id="outM2Base">0</span></div>
+            <div class="row"><span>Excess Copies:</span> <span id="outM2Excess">0</span></div>
+            <div class="row charge-row"><span>M2 Charge:</span> <span id="outM2Charge">₱0.00</span></div>
+            <br>
+            <div class="row"><span>M3 Gross (A3 Color):</span> <span id="outM3Gross">0</span></div>
+            <div class="row"><span>M3 Spoilage (2%):</span> <span id="outM3Spoil">0</span></div>
+            <div class="row"><span>M3 NET BILLABLE:</span> <span id="outM3Net">0</span></div>
+            <div class="row charge-row"><span>M3 Charge:</span> <span id="outM3Charge">₱0.00</span></div>
+        </div>
+
+        <div id="fleetOutput" class="output-card" style="display: none;">
+            <div id="fleetRowsContainer"></div>
+        </div>
+        
+        <h3>Service Invoice Form</h3>
+        <div class="output-card">
+            <div class="row" style="font-weight: bold;"><span>Total Copy Charges:</span> <span id="outCopyCharge">₱0.00</span></div>
+            <div class="row"><span>Monthly Rental:</span> <span id="outRental">₱0.00</span></div>
+            <div class="row" style="font-weight: bold;"><span>SUB TOTAL:</span> <span id="outSubTotal">₱0.00</span></div><br>
+            <div class="row"><span>Vatable Sales:</span> <span id="outVatable">₱0.00</span></div>
+            <div class="row"><span>VAT-Exempt / Zero Rated:</span> <span id="outExempt">₱0.00</span></div>
+            <div class="row"><span>12% VAT Amount:</span> <span id="outVat">₱0.00</span></div>
+            <div class="row"><span>Less: 2% WHT:</span> <span id="outWht">-₱0.00</span></div>
+            <div class="row total-row"><span>AMOUNT DUE:</span> <span id="outTotal">₱0.00</span></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Toggle UI between Standard and Fleet modes
+function toggleMode() {
+    const mode = document.getElementById("billingMode").value;
+    if (mode === 'standard') {
+        document.getElementById("standardMeters").style.display = "block";
+        document.getElementById("fleetMeters").style.display = "none";
+        document.getElementById("standardOutput").style.display = "block";
+        document.getElementById("fleetOutput").style.display = "none";
+    } else {
+        document.getElementById("standardMeters").style.display = "none";
+        document.getElementById("fleetMeters").style.display = "block";
+        document.getElementById("standardOutput").style.display = "none";
+        document.getElementById("fleetOutput").style.display = "block";
+    }
+}
+
+async function processImage(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const m1PresInput = document.getElementById('m1Pres');
+    m1PresInput.value = "Scanning..."; 
+    try {
+        const result = await Tesseract.recognize(file, 'eng');
+        m1PresInput.value = result.data.text.replace(/[^0-9]/g, '');
+    } catch (error) {
+        alert("Couldn't read the image. Please type it in.");
+        m1PresInput.value = "";
+    }
+}
+
+function clearForm() {
+    // Clear Standard
+    document.getElementById("m1Pres").value = ""; document.getElementById("m1Prev").value = "";
+    document.getElementById("m2Pres").value = ""; document.getElementById("m2Prev").value = "";
+    document.getElementById("m3Pres").value = ""; document.getElementById("m3Prev").value = "";
+    // Clear Fleet
+    for(let i=1; i<=4; i++){
+        document.getElementById("f"+i+"Pres").value = "";
+        document.getElementById("f"+i+"Prev").value = "";
+    }
+    document.getElementById("results").style.display = "none";
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function calculateSpoilage(volume) { return volume < 30 ? 0 : Math.round(volume * 0.02); }
+
+function round2(num) { return Math.round((num + Number.EPSILON) * 100) / 100; }
+
+function calculateBilling() {
+    const mode = document.getElementById("billingMode").value;
+    
+    // Shared Rates
+    const monthlyRental = Number(document.getElementById("rentalFee").value) || 0;
+    const isVatable = document.getElementById("isVatable").checked;
+    const hasWHT = document.getElementById("hasWht").checked;
+    const blackBaseRate = Number(document.getElementById("blackBaseRate").value) || 0;
+    
+    let copyCharges = 0;
+
+    if (mode === 'standard') {
+        const a4ColorRate = Number(document.getElementById("a4Rate").value) || 0;
+        const a3ColorRate = Number(document.getElementById("a3Rate").value) || 0;
+        const blackExcessRate = Number(document.getElementById("blackExcessRate").value) || 0;
+        const m2Threshold = Number(document.getElementById("m2Threshold").value) || 0;
+        const isFreeMode = document.getElementById("isFreeMode").checked;
+
+        const m1Pres = Number(document.getElementById("m1Pres").value) || 0; const m1Prev = Number(document.getElementById("m1Prev").value) || 0;
+        const m2Pres = Number(document.getElementById("m2Pres").value) || 0; const m2Prev = Number(document.getElementById("m2Prev").value) || 0;
+        const m3Pres = Number(document.getElementById("m3Pres").value) || 0; const m3Prev = Number(document.getElementById("m3Prev").value) || 0;
+
+        // M1
+        const m1Gross = m1Pres - m1Prev; const m3Gross = m3Pres - m3Prev;
+        const m1Adjusted = m1Gross - m3Gross;
+        const m1Spoil = calculateSpoilage(m1Adjusted); const m1Net = m1Adjusted - m1Spoil;
+        const m1Charge = m1Net * a4ColorRate;
+
+        // M3
+        const m3Spoil = calculateSpoilage(m3Gross); const m3Net = m3Gross - m3Spoil;
+        const m3Charge = m3Net * a3ColorRate;
+
+        // M2
+        const m2Gross = m2Pres - m2Prev; 
+        const m2Spoil = calculateSpoilage(m2Gross); const m2Net = m2Gross - m2Spoil;
+
+        let m2BaseCopies = 0; let m2ExcessCopies = 0; let m2Charge = 0;
+
+        if (isFreeMode) {
+            document.getElementById("lblM2Base").innerText = "Less Free Copies:";
+            m2BaseCopies = m2Threshold;
+            m2ExcessCopies = Math.max(0, m2Net - m2Threshold);
+            m2Charge = m2ExcessCopies * blackExcessRate;
+            document.getElementById("outM2Base").innerText = "-" + m2BaseCopies;
+        } else {
+            document.getElementById("lblM2Base").innerText = "Base/Min Copies:";
+            if (m2Net >= m2Threshold) {
+                m2BaseCopies = m2Threshold;
+                m2ExcessCopies = m2Net - m2Threshold;
+            } else {
+                m2BaseCopies = m2Net; m2ExcessCopies = 0;
+            }
+            m2Charge = (m2BaseCopies * blackBaseRate) + (m2ExcessCopies * blackExcessRate);
+            document.getElementById("outM2Base").innerText = m2BaseCopies + " @ ₱" + blackBaseRate.toFixed(2);
+        }
+
+        copyCharges = m1Charge + m2Charge + m3Charge;
+
+        // Update Standard UI
+        document.getElementById("outM1Gross").innerText = m1Gross; document.getElementById("outM3Sub").innerText = m3Gross;
+        document.getElementById("outM1Adj").innerText = m1Adjusted; document.getElementById("outM1Spoil").innerText = m1Spoil; document.getElementById("outM1Net").innerText = m1Net;
+        document.getElementById("outM2Gross").innerText = m2Gross; document.getElementById("outM2Spoil").innerText = m2Spoil; document.getElementById("outM2Net").innerText = m2Net; document.getElementById("outM2Excess").innerText = m2ExcessCopies; 
+        document.getElementById("outM3Gross").innerText = m3Gross; document.getElementById("outM3Spoil").innerText = m3Spoil; document.getElementById("outM3Net").innerText = m3Net;
+        document.getElementById("outM1Charge").innerText = "₱" + m1Charge.toFixed(2); document.getElementById("outM2Charge").innerText = "₱" + m2Charge.toFixed(2); document.getElementById("outM3Charge").innerText = "₱" + m3Charge.toFixed(2);
+
+    } else {
+        // FLEET MODE LOGIC
+        let fleetHtml = "";
+        for(let i=1; i<=4; i++){
+            const pres = Number(document.getElementById("f"+i+"Pres").value) || 0;
+            const prev = Number(document.getElementById("f"+i+"Prev").value) || 0;
+            
+            if(pres > 0 || prev > 0) {
+                const gross = pres - prev;
+                const spoil = calculateSpoilage(gross);
+                const net = gross - spoil;
+                const charge = net * blackBaseRate;
+                copyCharges += charge;
+                
+                fleetHtml += `
+                <div style="border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-bottom: 10px;">
+                    <div class="row" style="color:#2c3e50; font-size: 16px;"><strong>Machine ${i}</strong></div>
+                    <div class="row"><span>Gross Copies:</span> <span>${gross}</span></div>
+                    <div class="row"><span>Less 2% Spoilage:</span> <span>${spoil}</span></div>
+                    <div class="row" style="font-weight:bold;"><span>Net Copies:</span> <span>${net}</span></div>
+                    <div class="row charge-row"><span>Machine ${i} Charge:</span> <span>₱${charge.toFixed(2)}</span></div>
+                </div>`;
+            }
+        }
+        document.getElementById("fleetRowsContainer").innerHTML = fleetHtml;
+    }
+
+    // --- Totals and STRICT Accounting Taxes ---
+    const subTotal = copyCharges + monthlyRental;
+
+    let vatableSales = 0; let exemptSales = 0; let vatAmount = 0; let whtAmount = 0;
+    let finalAmountDue = subTotal; 
+
+    if (isVatable) { 
+        vatableSales = round2(subTotal / 1.12); 
+        vatAmount = round2(vatableSales * 0.12);
+        finalAmountDue = vatableSales + vatAmount; 
+    } else { 
+        exemptSales = subTotal; 
+    }
+    
+    const baseForWHT = isVatable ? vatableSales : exemptSales;
+    
+    if (hasWHT) { 
+        whtAmount = round2(baseForWHT * 0.02); 
+        finalAmountDue = finalAmountDue - whtAmount;
+    }
+
+    document.getElementById("outCopyCharge").innerText = "₱" + copyCharges.toFixed(2); 
+    document.getElementById("outRental").innerText = "₱" + monthlyRental.toFixed(2);
+    document.getElementById("outSubTotal").innerText = "₱" + subTotal.toFixed(2); 
+    document.getElementById("outVatable").innerText = "₱" + vatableSales.toFixed(2);
+    document.getElementById("outExempt").innerText = "₱" + exemptSales.toFixed(2); 
+    document.getElementById("outVat").innerText = "₱" + vatAmount.toFixed(2);
+    document.getElementById("outWht").innerText = "-₱" + whtAmount.toFixed(2); 
+    document.getElementById("outTotal").innerText = "₱" + finalAmountDue.toFixed(2);
+    
+    document.getElementById("results").style.display = "block";
+}
+
+if('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js');
+}
+</script>
+</body>
+</html>
